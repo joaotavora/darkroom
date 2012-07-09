@@ -12,14 +12,14 @@ It's value can be:
 - a function that returns a cons cell interpreted like the
   previous option.
 
-Value is effective when `darkroom-minor-mode' is toggled, when
+Value is effective when `darkroom-mode' is toggled, when
 changing window or by calling `darkroom-set-margins'")
 
 (defvar darkroom-turns-on-visual-line-mode t
   "If non-nil pair `visual-line-mode' with
-  `darkroom-minor-mode'")
+  `darkroom-mode'")
 (defvar darkroom-fringes-outside-margins t
-  "If non-nil use fringes outside margins for `darkroom-minor-mode'")
+  "If non-nil use fringes outside margins for `darkroom-mode'")
 
 (defun darkroom-margins ()
   (cond ((functionp darkroom-margins)
@@ -56,50 +56,41 @@ changing window or by calling `darkroom-set-margins'")
     (setq darkroom-margins (- darkroom-margins 0.05))
     (darkroom-set-margins)))
 
-(defun darkroom-fill-paragraph-maybe (really)
-  (interactive "P")
-  (cond (visual-line-mode
-         (if (not really)
-             (message "not filling paragraph")
-           (call-interactively 'fill-paragraph)
-           (message "filled paragraph even in visual-line-mode")))
-        (t
-         (call-interactively 'fill-paragraph))))
+(defun darkroom-confirm-fill-paragraph ()
+  (interactive)
+  (when (yes-or-no-p "Really fill paragraph?")
+    (call-interactively 'fill-paragraph)))
 
-(defvar darkroom-minor-mode-map (let ((map (make-sparse-keymap)))
+(defvar darkroom-mode-map (let ((map (make-sparse-keymap)))
                                   (define-key map (kbd "C-M-+") 'darkroom-increase-margins)
                                   (define-key map (kbd "C-M--") 'darkroom-decrease-margins)
-                                  (define-key map (kbd "M-q") 'darkroom-fill-paragraph-maybe)
+                                  (define-key map (kbd "M-q") 'darkroom-confirm-fill-paragraph)
                                   map))
 
 (defvar darkroom-saved-mode-line-format nil)
 (defvar darkroom-saved-visual-mode nil)
-(define-minor-mode darkroom-minor-mode
+(define-minor-mode darkroom-mode
   "A minor mode that emulates the darkroom editor."
   nil
   " dark"
   nil
-  (cond (darkroom-minor-mode
+  (cond (darkroom-mode
          (setq darkroom-saved-mode-line-format mode-line-format
-               mode-line-format nil
-               darkroom-saved-header-line-format header-line-format
-               header-line-format "")
+               mode-line-format nil)
          (setq fringes-outside-margins darkroom-fringes-outside-margins)
          (add-hook 'window-configuration-change-hook 'darkroom-set-margins nil t)
          (darkroom-set-margins)
+         (setq header-line-format t)
          ;; a hack shoulnd't be needed but apparently is
          (set-window-buffer (selected-window) (current-buffer))
          (when darkroom-turns-on-visual-line-mode
            (visual-line-mode 1)))
         (t
-         (setq mode-line-format darkroom-saved-mode-line-format
-               header-line-format darkroom-saved-header-line-format)
+         (setq header-line-format nil)
+         (setq mode-line-format darkroom-saved-mode-line-format)
          (when darkroom-turns-on-visual-line-mode
            (visual-line-mode -1))
          (remove-hook 'window-configuration-change-hook 'darkroom-set-margins t)
          (set-window-margins (selected-window) 0 0))))
-
-
-
 
 (provide 'darkroom)
