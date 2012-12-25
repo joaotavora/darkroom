@@ -81,18 +81,19 @@ changing window or by calling `darkroom-set-margins'")
   nil
   (cond (darkroom-minor-mode
          (setq darkroom-saved-mode-line-format mode-line-format
-               mode-line-format nil)
+               mode-line-format nil
+               darkroom-saved-header-line-format header-line-format
+               header-line-format "")
          (setq fringes-outside-margins darkroom-fringes-outside-margins)
          (add-hook 'window-configuration-change-hook 'darkroom-set-margins nil t)
          (darkroom-set-margins)
-         (setq header-line-format t)
          ;; a hack shoulnd't be needed but apparently is
          (set-window-buffer (selected-window) (current-buffer))
          (when darkroom-turns-on-visual-line-mode
            (visual-line-mode 1)))
         (t
-         (setq header-line-format nil)
-         (setq mode-line-format darkroom-saved-mode-line-format)
+         (setq mode-line-format darkroom-saved-mode-line-format
+               header-line-format darkroom-saved-header-line-format)
          (when darkroom-turns-on-visual-line-mode
            (visual-line-mode -1))
          (remove-hook 'window-configuration-change-hook 'darkroom-set-margins t)
