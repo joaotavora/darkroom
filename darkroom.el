@@ -56,15 +56,20 @@ changing window or by calling `darkroom-set-margins'")
     (setq darkroom-margins (- darkroom-margins 0.05))
     (darkroom-set-margins)))
 
-(defun darkroom-confirm-fill-paragraph ()
-  (interactive)
-  (when (yes-or-no-p "Really fill paragraph?")
-    (call-interactively 'fill-paragraph)))
+(defun darkroom-fill-paragraph-maybe (really)
+  (interactive "P")
+  (cond (visual-line-mode
+         (if (not really)
+             (message "not filling paragraph")
+           (call-interactively 'fill-paragraph)
+           (message "filled paragraph even in visual-line-mode")))
+        (t
+         (call-interactively 'fill-paragraph))))
 
 (defvar darkroom-minor-mode-map (let ((map (make-sparse-keymap)))
                                   (define-key map (kbd "C-M-+") 'darkroom-increase-margins)
                                   (define-key map (kbd "C-M--") 'darkroom-decrease-margins)
-                                  (define-key map (kbd "M-q") 'darkroom-confirm-fill-paragraph)
+                                  (define-key map (kbd "M-q") 'darkroom-fill-paragraph-maybe)
                                   map))
 
 (defvar darkroom-saved-mode-line-format nil)
