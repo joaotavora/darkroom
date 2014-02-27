@@ -136,7 +136,7 @@ changing window or by calling `darkroom-set-margins'")
          (add-hook 'window-configuration-change-hook 'darkroom-maybe-enable nil t)
          (darkroom-maybe-enable))
         (t
-         (darkroom-maybe-enable)
+         (if darkroom-mode (darkroom-mode -1))
          (remove-hook 'window-configuration-change-hook 'darkroom-maybe-enable t))))
 
 
