@@ -38,11 +38,19 @@ changing window or by calling `darkroom-set-margins'")
 
 (defun darkroom-set-margins (&optional margins)
   "Adjust margins to `darkroom-margins' or optional MARGINS."
-  (let ((margins
-         (or margins
-             (darkroom-margins))))
-    (when margins
-      (set-window-margins (selected-window) (car margins) (cdr margins)))))
+  (let* ((window-configuration-change-hook nil)
+         (margins (or margins
+                      (darkroom-margins))))
+    (walk-windows #'(lambda (w)
+                      (when (eq (window-buffer w) (current-buffer))
+                        (setq fringes-outside-margins darkroom-fringes-outside-margins)
+                        ;; See description of
+                        ;; `fringes-outside-margins' for the reason
+                        ;; for this apparent noop
+                        (set-window-buffer w (current-buffer))
+                        (set-window-margins w (car margins) (cdr margins))))
+                  nil
+                  'all-frames)))
 
 (defun darkroom-increase-margins ()
   (interactive)
@@ -56,41 +64,82 @@ changing window or by calling `darkroom-set-margins'")
     (setq darkroom-margins (- darkroom-margins 0.05))
     (darkroom-set-margins)))
 
-(defun darkroom-confirm-fill-paragraph ()
-  (interactive)
-  (when (yes-or-no-p "Really fill paragraph?")
-    (call-interactively 'fill-paragraph)))
+(defun darkroom-fill-paragraph-maybe (really)
+  (interactive "P")
+  (cond (visual-line-mode
+         (if (not really)
+             (message "not filling paragraph")
+           (call-interactively 'fill-paragraph)
+           (message "filled paragraph even in visual-line-mode")))
+        (t
+         (call-interactively 'fill-paragraph))))
 
 (defvar darkroom-mode-map (let ((map (make-sparse-keymap)))
                                   (define-key map (kbd "C-M-+") 'darkroom-increase-margins)
                                   (define-key map (kbd "C-M--") 'darkroom-decrease-margins)
-                                  (define-key map (kbd "M-q") 'darkroom-confirm-fill-paragraph)
+                                  (define-key map (kbd "M-q") 'darkroom-fill-paragraph-maybe)
                                   map))
 
 (defvar darkroom-saved-mode-line-format nil)
-(defvar darkroom-saved-visual-mode nil)
+(defvar darkroom-saved-header-line-format nil)
+(defvar darkroom-saved-visual-line-mode nil)
+
+(make-variable-buffer-local 'darkroom-saved-mode-line-format)
+(make-variable-buffer-local 'darkroom-saved-header-line-format)
+(make-variable-buffer-local 'darkroom-saved-visual-line-mode)
+
+(defun darkroom-visual-mode-maybe-enable ()
+  (when darkroom-turns-on-visual-line-mode
+    (cond (darkroom-mode
+           (setq darkroom-saved-visual-mode visual-line-mode)
+           (visual-line-mode 1))
+          (t
+           (unless darkroom-saved-visual-line-mode
+             (visual-line-mode -1))))))
+
 (define-minor-mode darkroom-mode
-  "A minor mode that emulates the darkroom editor."
-  nil
-  " dark"
-  nil
+  "Minor mode emulating the darkroom editor that I never used."
+  nil nil nil
   (cond (darkroom-mode
          (setq darkroom-saved-mode-line-format mode-line-format
-               mode-line-format nil)
-         (setq fringes-outside-margins darkroom-fringes-outside-margins)
-         (add-hook 'window-configuration-change-hook 'darkroom-set-margins nil t)
+               mode-line-format nil
+               darkroom-saved-header-line-format header-line-format
+               header-line-format nil)
          (darkroom-set-margins)
-         (setq header-line-format t)
-         ;; a hack shoulnd't be needed but apparently is
-         (set-window-buffer (selected-window) (current-buffer))
-         (when darkroom-turns-on-visual-line-mode
-           (visual-line-mode 1)))
+         (darkroom-visual-mode-maybe-enable)
+         (text-scale-increase 2)
+         (add-hook 'window-configuration-change-hook 'darkroom-set-margins nil t))
         (t
-         (setq header-line-format nil)
-         (setq mode-line-format darkroom-saved-mode-line-format)
-         (when darkroom-turns-on-visual-line-mode
-           (visual-line-mode -1))
-         (remove-hook 'window-configuration-change-hook 'darkroom-set-margins t)
-         (set-window-margins (selected-window) 0 0))))
+         (setq mode-line-format darkroom-saved-mode-line-format
+               header-line-format darkroom-saved-header-line-format)
+         (text-scale-decrease 2)
+         (darkroom-set-margins '(0 . 0))
+         (darkroom-visual-mode-maybe-enable)
+         (remove-hook 'window-configuration-change-hook 'darkroom-set-margins t))))
+
+(defun darkroom-maybe-enable ()
+  (cond ((and (not darkroom-mode) (= (count-windows) 1))
+         (darkroom-mode 1)) 
+        ((and darkroom-mode (> (count-windows) 1))
+         (darkroom-mode -1))
+        (t
+         (message "Hmm buffer: %s windows: %s darkroom-mode: %s"
+                  (current-buffer)
+                  (count-windows)
+                  darkroom-mode))))
+
+
+(define-minor-mode darkroom-tentative-mode
+  "Minor mode that enters `darkroom-mode' when all windws are deleted"
+  nil "D" nil
+  (cond (darkroom-tentative-mode
+         (add-hook 'window-configuration-change-hook 'darkroom-maybe-enable nil t)
+         (darkroom-maybe-enable))
+        (t
+         (darkroom-maybe-enable)
+         (remove-hook 'window-configuration-change-hook 'darkroom-maybe-enable t))))
+
+
+
 
 (provide 'darkroom)
