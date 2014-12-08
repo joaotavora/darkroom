@@ -79,6 +79,11 @@ Value is passed to `text-scale-increase'."
   :type 'boolean
   :group 'darkroom)
 
+(defcustom darkroom-margin-increment 0.05
+  "Increment to add used in `darkroom-increase-margins'."
+  :type 'float
+  :group 'darkroom)
+
 (defun darkroom-margins ()
   (cond ((functionp darkroom-margins)
          (funcall darkroom-margins))
@@ -110,17 +115,15 @@ Value is passed to `text-scale-increase'."
                   nil
                   'all-frames)))
 
-(defun darkroom-increase-margins ()
-  (interactive)
+(defun darkroom-increase-margins (increment)
+  (interactive (list darkroom-margin-increment))
   (when (floatp darkroom-margins)
-    (setq darkroom-margins (+ 0.05 darkroom-margins))
+    (setq darkroom-margins (+ increment darkroom-margins))
     (darkroom-set-margins)))
 
-(defun darkroom-decrease-margins ()
-  (interactive)
-  (when (floatp darkroom-margins)
-    (setq darkroom-margins (- darkroom-margins 0.05))
-    (darkroom-set-margins)))
+(defun darkroom-decrease-margins (decrement)
+  (interactive (list darkroom-margin-increment))
+  (darkroom-increase-margins (- decrement)))
 
 (defvar darkroom-mode-map (let ((map (make-sparse-keymap)))
                                   (define-key map (kbd "C-M-+") 'darkroom-increase-margins)
