@@ -1,7 +1,58 @@
-(defvar darkroom-margins 0.15
-  "Margins to use in darkroom-mode.
+;;; darkroom.el --- Remove visual distractions and focus on writing  -*- lexical-binding: t; -*-
 
-It's value can be:
+;; Copyright (C) 2014  João Távora
+
+;; Author: João Távora <joaotavora@gmail.com>
+;; Keywords: convenience, emulations
+;; Version: 0.1
+
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+;;; Commentary:
+
+;; The main entrypoints to this extension are two minor modes
+;;
+;;    M-x darkroom-mode
+;;    M-x darkroom-tentative-mode
+;;
+;; The first makes current buffer to enter `darkroom-mode'
+;; immediately: keeping the window configuration untouched, text is
+;; enlarged, centered on the window with margins, and the modeline is
+;; elided.
+;;
+;; The second, `darkroom-tentative-mode', makes the current buffer
+;; turn on `darkroom-mode' whenever all other windows are deleted,
+;; i.e. the buffer is solo on the current Emacs frame. Whenever the
+;; window is split to display some other buffer, the original buffer's
+;; configuration is reset.
+;;
+;; Personally, I always use `darkroom-tentative-mode'.
+;;
+;; See also the customization options `darkroom-margins' and
+;; `darkroom-fringes-outside-margins', which affect both modes.
+
+;;; Code:
+
+(defgroup darkroom nil
+  "Remove visual distractions and focus on writing"
+  :prefix "darkroom-"
+  :group 'emulations)
+
+(defcustom darkroom-margins 0.15
+  "Margins to use in `darkroom-mode'.
+
+Its value can be:
 
 - a floating point value betweeen 0 and 1, specifies percentage of
   window width in columns to use as a margin.
@@ -9,17 +60,24 @@ It's value can be:
 - a cons cell (LEFT RIGHT) specifying the left and right margins
   in columns.
 
-- a function that returns a cons cell interpreted like the
-  previous option.
+- a function of no arguments that returns a cons cell interpreted
+  like the previous option.
 
 Value is effective when `darkroom-mode' is toggled, when
-changing window or by calling `darkroom-set-margins'")
+changing window or by calling `darkroom-set-margins'"
+  :type 'float
+  :group 'darkroom)
 
-(defvar darkroom-turns-on-visual-line-mode t
-  "If non-nil pair `visual-line-mode' with
-  `darkroom-mode'")
-(defvar darkroom-fringes-outside-margins t
-  "If non-nil use fringes outside margins for `darkroom-mode'")
+(defcustom darkroom-text-scale-increase 2
+  "Steps to increase text size when in `darkroom-mode'.
+Value is passed to `text-scale-increase'."
+  :type 'integer
+  :group 'darkroom)
+
+(defcustom darkroom-fringes-outside-margins t
+  "If non-nil use fringes outside margins for `darkroom-mode'"
+  :type 'boolean
+  :group 'darkroom)
 
 (defun darkroom-margins ()
   (cond ((functionp darkroom-margins)
@@ -64,57 +122,38 @@ changing window or by calling `darkroom-set-margins'")
     (setq darkroom-margins (- darkroom-margins 0.05))
     (darkroom-set-margins)))
 
-(defun darkroom-fill-paragraph-maybe (really)
-  (interactive "P")
-  (cond (visual-line-mode
-         (if (not really)
-             (message "not filling paragraph")
-           (call-interactively 'fill-paragraph)
-           (message "filled paragraph even in visual-line-mode")))
-        (t
-         (call-interactively 'fill-paragraph))))
-
 (defvar darkroom-mode-map (let ((map (make-sparse-keymap)))
                                   (define-key map (kbd "C-M-+") 'darkroom-increase-margins)
                                   (define-key map (kbd "C-M--") 'darkroom-decrease-margins)
-                                  (define-key map (kbd "M-q") 'darkroom-fill-paragraph-maybe)
                                   map))
 
 (defvar darkroom-saved-mode-line-format nil)
+
 (defvar darkroom-saved-header-line-format nil)
-(defvar darkroom-saved-visual-line-mode nil)
 
 (make-variable-buffer-local 'darkroom-saved-mode-line-format)
-(make-variable-buffer-local 'darkroom-saved-header-line-format)
-(make-variable-buffer-local 'darkroom-saved-visual-line-mode)
 
-(defun darkroom-visual-mode-maybe-enable ()
-  (when darkroom-turns-on-visual-line-mode
-    (cond (darkroom-mode
-           (setq darkroom-saved-visual-mode visual-line-mode)
-           (visual-line-mode 1))
-          (t
-           (unless darkroom-saved-visual-line-mode
-             (visual-line-mode -1))))))
+(make-variable-buffer-local 'darkroom-saved-header-line-format)
 
 (define-minor-mode darkroom-mode
-  "Minor mode emulating the darkroom editor that I never used."
-  nil nil nil
+  "Remove visual distractions and focus on writing.
+When this mode is active, everything but the buffer's text is
+elided from view. The buffer margins are set so that text is
+centered on screen. Text size is increased (display engine
+allowing) by `darkroom-text-scale-increase'." nil nil nil
   (cond (darkroom-mode
          (setq darkroom-saved-mode-line-format mode-line-format
                mode-line-format nil
                darkroom-saved-header-line-format header-line-format
                header-line-format nil)
          (darkroom-set-margins)
-         (darkroom-visual-mode-maybe-enable)
-         (text-scale-increase 2)
+         (text-scale-increase darkroom-text-scale-increase)
          (add-hook 'window-configuration-change-hook 'darkroom-set-margins nil t))
         (t
          (setq mode-line-format darkroom-saved-mode-line-format
                header-line-format darkroom-saved-header-line-format)
          (text-scale-decrease 2)
          (darkroom-set-margins '(0 . 0))
-         (darkroom-visual-mode-maybe-enable)
          (remove-hook 'window-configuration-change-hook 'darkroom-set-margins t))))
 
 (defun darkroom-maybe-enable ()
@@ -123,10 +162,9 @@ changing window or by calling `darkroom-set-margins'")
         ((and darkroom-mode (> (count-windows) 1))
          (darkroom-mode -1))
         (t
-         (message "Hmm buffer: %s windows: %s darkroom-mode: %s"
-                  (current-buffer)
-                  (count-windows)
-                  darkroom-mode))))
+         ;; (message "debug: buffer: %s windows: %s darkroom-mode: %s"
+         ;;          (current-buffer) (count-windows) darkroom-mode)
+         )))
 
 
 (define-minor-mode darkroom-tentative-mode
@@ -141,5 +179,5 @@ changing window or by calling `darkroom-set-margins'")
 
 
 
-
 (provide 'darkroom)
+;;; darkroom.el ends here
