@@ -180,6 +180,7 @@ Set by `darkroom-set-margins'")
                   'all-frames)))
 
 (defun darkroom-increase-margins (increment)
+  "Increase darkroom margins by INCREMENT."
   (interactive (list darkroom-margin-increment))
   (unless (and (consp darkroom-buffer-margins)
                (numberp (car darkroom-buffer-margins))
@@ -192,6 +193,7 @@ Set by `darkroom-set-margins'")
   (darkroom-set-margins darkroom-buffer-margins))
 
 (defun darkroom-decrease-margins (decrement)
+  "Decrease darkroom margins by DECREMENT."
   (interactive (list darkroom-margin-increment))
   (darkroom-increase-margins (- decrement)))
 
