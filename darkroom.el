@@ -230,9 +230,28 @@ Set by `darkroom--set-margins'")
 ;; (defvar darkroom--saved-text-scale-mode-amount nil
 ;;   "Text scale before `darkroom-mode' is turned on.")
 
-(defvar darkroom--tentative-mode-driving nil
-  "Non-nil if `darkroom-tentative-mode' toggles
-  `darkroom-mode'.")
+(defun darkroom--turn-on ()
+  (set (make-local-variable 'darkroom--saved-margins) (window-margins))
+  (set (make-local-variable 'darkroom--saved-mode-line-format)
+       mode-line-format)
+  (set (make-local-variable 'darkroom--saved-header-line-format)
+       header-line-format)
+  (setq mode-line-format nil)
+  (setq header-line-format nil)
+  (text-scale-increase darkroom-text-scale-increase)
+  (darkroom--set-margins (darkroom--compute-margins))
+  (add-hook 'window-configuration-change-hook 'darkroom--set-margins
+            t t))
+
+(defun darkroom--turn-off ()
+  (setq mode-line-format darkroom--saved-mode-line-format
+        header-line-format darkroom--saved-header-line-format)
+  (text-scale-decrease darkroom-text-scale-increase)
+  (let (darkroom--buffer-margins)
+    (darkroom--set-margins darkroom--saved-margins))
+  (set (make-local-variable 'darkroom--buffer-margins) nil)
+  (remove-hook 'window-configuration-change-hook 'darkroom--set-margins
+               t))
 
 (define-minor-mode darkroom-mode
   "Remove visual distractions and focus on writing. When this
@@ -240,52 +259,41 @@ mode is active, everything but the buffer's text is elided from
 view. The buffer margins are set so that text is centered on
 screen. Text size is increased (display engine allowing) by
 `darkroom-text-scale-increase'." nil nil nil
-  (when (and darkroom-tentative-mode
-             (not darkroom--tentative-mode-driving))
+  (when darkroom-tentative-mode
     (error
-     "Don't try to toggle `darkroom-mode' when in `darkroom-tentative-mode'"))
+     "Don't mix `darkroom-mode' and `darkroom-tentative-mode'"))
+  ;; FIXME: unfortunately, signalling an error doesn't prevent the
+  ;; mode from turning itself off. How do I do that?
   (cond (darkroom-mode
-         (set (make-local-variable 'darkroom--saved-margins) (window-margins))
-         (set (make-local-variable 'darkroom--saved-mode-line-format)
-              mode-line-format)
-         (set (make-local-variable 'darkroom--saved-header-line-format)
-              header-line-format)
-         (setq mode-line-format nil)
-         (setq header-line-format nil)
-         (text-scale-increase darkroom-text-scale-increase)
-         (darkroom--set-margins (darkroom--compute-margins))
-         (add-hook 'window-configuration-change-hook 'darkroom--set-margins
-                   t t))
+         (darkroom--turn-on))
         (t
-         (setq mode-line-format darkroom--saved-mode-line-format
-               header-line-format darkroom--saved-header-line-format)
-         (text-scale-decrease darkroom-text-scale-increase)
-         (let (darkroom--buffer-margins)
-           (darkroom--set-margins darkroom--saved-margins))
-         (remove-hook 'window-configuration-change-hook 'darkroom--set-margins
-                      t))))
+         (darkroom--turn-off))))
 
 (defun darkroom--maybe-enable ()
   (let ((darkroom--tentative-mode-driving t))
-    (cond ((and (not darkroom-mode) (= (count-windows) 1))
-           (darkroom-mode 1))
-          ((and darkroom-mode (> (count-windows) 1))
-           (darkroom-mode -1))
+    (cond ((and (not darkroom--buffer-margins) (= (count-windows) 1))
+           (darkroom--turn-on))
+          ((and darkroom--buffer-margins (> (count-windows) 1))
+           (darkroom--turn-off))
           (t
-           ;; (message "debug: buffer: %s windows: %s darkroom-mode: %s"
-           ;;          (current-buffer) (count-windows) darkroom-mode)
+           ;; (message "debug: buffer: %s windows: %s
+           ;; darkroom-buffer--margins: %s"
+           ;;          (current-buffer) (count-windows)
+           ;;          darkroom-buffer--margins)
            ))))
-
 
 (define-minor-mode darkroom-tentative-mode
   "Enters `darkroom-mode' when all other windows are deleted."
   nil " Room" nil
+  (when darkroom-mode
+    (error
+     "Don't mix `darkroom-mode' and `darkroom-tentative-mode'"))
   (cond (darkroom-tentative-mode
          (add-hook 'window-configuration-change-hook
                    'darkroom--maybe-enable nil t)
          (darkroom--maybe-enable))
         (t
-         (if darkroom-mode (darkroom-mode -1))
+         (darkroom--turn-off)
          (remove-hook 'window-configuration-change-hook
                       'darkroom--maybe-enable t))))
 
