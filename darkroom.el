@@ -22,21 +22,21 @@
 
 ;;; Commentary:
 
-;; The main entrypoints to this extension are two minor modes
+;; The main entrypoints to this extension are two minor modes:
 ;;
 ;;    M-x darkroom-mode
 ;;    M-x darkroom-tentative-mode
 ;;
-;; The first makes current buffer to enter `darkroom-mode'
-;; immediately: keeping the window configuration untouched, text is
-;; enlarged, centered on the window with margins, and the modeline is
-;; elided.
+;; `darkroom-mode' makes visual distractions disappear: the
+;; mode-line is temporarily elided, text is enlarged and margins are
+;; adjusted so that it's centered on the window.
 ;;
-;; The second, `darkroom-tentative-mode', makes the current buffer
-;; turn on `darkroom-mode' whenever all other windows are deleted,
-;; i.e. the buffer is solo on the current Emacs frame. Whenever the
-;; window is split to display some other buffer, the original buffer's
-;; configuration is reset.
+;; `darkroom-tentative-mode' is similar, but it doesn't immediately
+;; turn-on `darkroom-mode', unless the current buffer lives in the
+;; sole window of the Emacs frame (i.e. all other windows are
+;; deleted). Whenever the frame is split to display more windows and
+;; more buffers, the buffer exits `darkroom-mode'. Whenever they are
+;; deleted, the buffer re-enters `darkroom-mode'.
 ;;
 ;; Personally, I always use `darkroom-tentative-mode'.
 ;;
@@ -64,8 +64,7 @@ Its value can be:
 - a function of no arguments that returns a cons cell interpreted
   like the previous option.
 
-Value is effective when `darkroom-mode' is toggled, when
-changing window or by calling `darkroom--set-margins'"
+Value is effective when `darkroom-mode' is toggled."
   :type 'float
   :group 'darkroom)
 
@@ -130,7 +129,7 @@ margins should center it on the window, otherwise, margins of
           (visual-line-mode 1))
         0.15)
        ((> top-quartile-avg (* 0.9 fill-column))
-        (let ((margin (round (/ (- window-width top-quartile-avg) 2))))
+        (let ((margin (truncate (/ (- window-width top-quartile-avg) 2))))
           (cons margin margin)))
        (t
         0.15)))))
