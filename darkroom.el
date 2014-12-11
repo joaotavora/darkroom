@@ -50,7 +50,7 @@
   :prefix "darkroom-"
   :group 'emulations)
 
-(defcustom darkroom-margins 0.15
+(defcustom darkroom-margins 'darkroom-guess-margins
   "Margins to use in `darkroom-mode'.
 
 Its value can be:
@@ -62,10 +62,14 @@ Its value can be:
   in columns.
 
 - a function of no arguments that returns a cons cell interpreted
-  like the previous option.
+  like the previous option. An example is
+  `darkroom-guess-margins', which see.
 
 Value is effective when `darkroom-mode' is toggled."
-  :type 'float
+  :type '(choice float
+                 (cons integer integer)
+                 (function-item darkroom-guess-margins :doc "Guess margins")
+                 (function darkroom-guess-margins))
   :group 'darkroom)
 
 (defcustom darkroom-text-scale-increase 2
@@ -84,6 +88,36 @@ Value is passed to `text-scale-increase'."
   :type 'float
   :group 'darkroom)
 
+(defcustom darkroom-margins-if-failed-guess 0.15
+  "Margins when `darkroom-guess-margins' fails.
+If `darkroom-guess-margins' failed to figure out margins to
+center the text, use this percentage of window width for the
+symmetical margins."
+  :type 'float
+  :group 'darkroom)
+
+(defun darkroom--real-window-width ()
+  "Horrible hack to get the window width in characters.
+`window-width' ignores text scaling."
+  (let ((inhibit-read-only t)
+        (buffer-undo-list t)
+        (truncate-lines nil)
+        (truncate-partial-width-windows nil)
+        (word-wrap t)
+        (line-move-visual t))
+    (save-excursion
+      (with-silent-modifications
+        (let ((begin (point)))
+          (unwind-protect
+              (progn
+                (insert (make-string 10000 ?!))
+                (save-excursion
+                  (goto-char begin)
+                  (next-line)
+                  (backward-char)
+                  (current-column)))
+            (delete-region begin (point))))))))
+
 (defun darkroom-guess-margins ()
   "Guess suitable margins for `darkroom-margins'.
 Collects some statistics about the buffer's line lengths, and
@@ -91,12 +125,9 @@ apply a heuristic to figure out how wide to set the margins. If
 the buffer's paragraphs are mostly filled to `fill-column',
 margins should center it on the window, otherwise, margins of
 0.15 percent are used."
-  ;;; FIXME: broken when darkroom-text-scale-increase is anything but
-  ;;; 0, since window-width ignores text scaling. Otherwise, a
-  ;;; suitable default to put in `darkroom-margins', I guess.
   (if visual-line-mode
-      0.15
-    (let* ((window-width (window-width))
+      darkroom-margins-if-failed-guess
+    (let* ((window-width (darkroom--real-window-width))
            (line-widths (save-excursion
                           (goto-char (point-min))
                           (cl-loop for start = (point)
@@ -107,34 +138,22 @@ margins should center it on the window, otherwise, margins of
                                    unless (zerop width)
                                    collect width)))
            (_longest-width (cl-reduce #'max line-widths :initial-value 0))
-           (top-quartile-avg (cl-loop with n = (/ (length line-widths)
-                                                  4)
-                                      for width in (copy-sequence
-                                                    (sort line-widths #'>))
-                                      for i from 1 upto n
-                                      sum width into total
-                                      finally (return (/ total n 1.0)))))
+           (top-quartile-avg
+            (let ((n4 (/ (length line-widths) 4)))
+              (/ (apply '+ (cl-subseq (sort line-widths '>) 0 n4)) n4))))
       (cond
        ((> top-quartile-avg
            window-width)
-        (when (y-or-n-p
-               (format
-                (mapconcat
-                 #'identity
-                 '("Long lines detected!"
-                   "(top 25%% average %s chars and window-width is %s)"
-                   "Perhaps turn on visual-line-mode for a better darkroom?")
-                 "\n")
-                top-quartile-avg window-width))
-          (visual-line-mode 1))
-        0.15)
+        (message "Long lines detected. Consider turning on `visual-line-mode'")
+        darkroom-margins-if-failed-guess)
        ((> top-quartile-avg (* 0.9 fill-column))
         (let ((margin (truncate (/ (- window-width top-quartile-avg) 2))))
           (cons margin margin)))
        (t
-        0.15)))))
+        darkroom-margins-if-failed-guess)))))
 
 (defun darkroom--compute-margins ()
+  "Computes (LEFT . RIGHT) margins from `darkroom-margins'."
   (let ((darkroom-margins
          (if (functionp darkroom-margins)
              (funcall darkroom-margins)
@@ -202,9 +221,18 @@ Set by `darkroom--set-margins'")
     (define-key map (kbd "C-M--") 'darkroom-decrease-margins)
     map))
 
-(defvar darkroom--saved-mode-line-format nil)
-(defvar darkroom--saved-header-line-format nil)
-(defvar darkroom--saved-margins nil)
+(defvar darkroom--saved-mode-line-format nil
+  "Mode line before `darkroom-mode' is turned on.")
+(defvar darkroom--saved-header-line-format nil
+  "Header line before `darkroom-mode' is turned on.")
+(defvar darkroom--saved-margins nil
+  "Margins before `darkroom-mode' is turned on.")
+;; (defvar darkroom--saved-text-scale-mode-amount nil
+;;   "Text scale before `darkroom-mode' is turned on.")
+
+(defvar darkroom--tentative-mode-driving nil
+  "Non-nil if `darkroom-tentative-mode' toggles
+  `darkroom-mode'.")
 
 (define-minor-mode darkroom-mode
   "Remove visual distractions and focus on writing. When this
@@ -212,6 +240,10 @@ mode is active, everything but the buffer's text is elided from
 view. The buffer margins are set so that text is centered on
 screen. Text size is increased (display engine allowing) by
 `darkroom-text-scale-increase'." nil nil nil
+  (when (and darkroom-tentative-mode
+             (not darkroom--tentative-mode-driving))
+    (error
+     "Don't try to toggle `darkroom-mode' when in `darkroom-tentative-mode'"))
   (cond (darkroom-mode
          (set (make-local-variable 'darkroom--saved-margins) (window-margins))
          (set (make-local-variable 'darkroom--saved-mode-line-format)
@@ -223,7 +255,7 @@ screen. Text size is increased (display engine allowing) by
          (text-scale-increase darkroom-text-scale-increase)
          (darkroom--set-margins (darkroom--compute-margins))
          (add-hook 'window-configuration-change-hook 'darkroom--set-margins
-                   nil t))
+                   t t))
         (t
          (setq mode-line-format darkroom--saved-mode-line-format
                header-line-format darkroom--saved-header-line-format)
@@ -234,19 +266,20 @@ screen. Text size is increased (display engine allowing) by
                       t))))
 
 (defun darkroom--maybe-enable ()
-  (cond ((and (not darkroom-mode) (= (count-windows) 1))
-         (darkroom-mode 1))
-        ((and darkroom-mode (> (count-windows) 1))
-         (darkroom-mode -1))
-        (t
-         ;; (message "debug: buffer: %s windows: %s darkroom-mode: %s"
-         ;;          (current-buffer) (count-windows) darkroom-mode)
-         )))
+  (let ((darkroom--tentative-mode-driving t))
+    (cond ((and (not darkroom-mode) (= (count-windows) 1))
+           (darkroom-mode 1))
+          ((and darkroom-mode (> (count-windows) 1))
+           (darkroom-mode -1))
+          (t
+           ;; (message "debug: buffer: %s windows: %s darkroom-mode: %s"
+           ;;          (current-buffer) (count-windows) darkroom-mode)
+           ))))
 
 
 (define-minor-mode darkroom-tentative-mode
-  "Minor mode that enters `darkroom-mode' when all windws are deleted"
-  nil "DarkroomT" nil
+  "Enters `darkroom-mode' when all other windows are deleted."
+  nil " Room" nil
   (cond (darkroom-tentative-mode
          (add-hook 'window-configuration-change-hook
                    'darkroom--maybe-enable nil t)
