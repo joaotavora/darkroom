@@ -190,6 +190,9 @@ instead of a window's geometry."
                 (- (nth 2 edges) (nth 0 edges)))
               f)))
 
+(defvar darkroom--margin-factor 1
+  "Buffer local factor affecting `darkroom--set-margins'")
+
 (defun darkroom--set-margins ()
   "Set darkroom margins for currently selected window"
   (let* ((window-configuration-change-hook nil)
@@ -199,18 +202,29 @@ instead of a window's geometry."
     ;; `fringes-outside-margins' for the reason
     ;; for this apparent noop
     (set-window-buffer window (current-buffer))
-    (set-window-margins window (car margins) (cdr margins))))
+    (set-window-margins window
+                        (round
+                         (* darkroom--margin-factor
+                            (car margins)))
+                        (round
+                         (* darkroom--margin-factor
+                            (cdr margins))))))
 
 (defun darkroom--reset-margins ()
   "Reset darkroom margins for currently selected window."
   (let* ((window (selected-window))
          (margins (window-parameter window 'darkroom--saved-margins)))
-    (set-window-margins window (or (car margins) 0) (or (cdr margins) 0))))
+    (set-window-margins window 0 0)))
 
 (defun darkroom-increase-margins (increment)
   "Increase darkroom margins by INCREMENT."
   (interactive (list darkroom-margin-increment))
-  (error "Not implemented yet"))
+  (set (make-local-variable 'darkroom--margin-factor)
+       (* darkroom--margin-factor (+ 1 increment)))
+  (mapc #'(lambda (w)
+            (with-selected-window w
+              (darkroom--set-margins)))
+        (get-buffer-window-list (current-buffer))))
 
 (defun darkroom-decrease-margins (decrement)
   "Decrease darkroom margins by DECREMENT."
@@ -236,8 +250,8 @@ Alist of (VARIABLE . BEFORE-VALUE)")
 ;; (defvar darkroom--saved-text-scale-mode-amount nil
 ;;   "Text scale before `darkroom-mode' is turned on.")
 
-(defun darkroom--turn-on ()
-  "Turns darkroom on for the current buffer"
+(defun darkroom--enter ()
+  "Save current state and enter darkroom for the current buffer."
   (setq darkroom--saved-state
         (mapcar #'(lambda (sym)
                     (cons sym (buffer-local-value sym (current-buffer))))
@@ -248,13 +262,11 @@ Alist of (VARIABLE . BEFORE-VALUE)")
   (text-scale-increase darkroom-text-scale-increase)
   (mapc #'(lambda (w)
             (with-selected-window w
-              (set-window-parameter w 'darkroom--saved-margins (window-margins))
               (darkroom--set-margins)))
-        (get-buffer-window-list (current-buffer)))
-  (add-hook 'window-configuration-change-hook 'darkroom--set-margins
-            t t))
+        (get-buffer-window-list (current-buffer))))
 
-(defun darkroom--turn-off ()
+(defun darkroom--leave ()
+  "Undo the effects of `darkroom--enter'."
   (mapc #'(lambda (pair)
             (set (make-local-variable (car pair)) (cdr pair)))
         darkroom--saved-state)
@@ -263,9 +275,18 @@ Alist of (VARIABLE . BEFORE-VALUE)")
   (mapc #'(lambda (w)
             (with-selected-window w
               (darkroom--reset-margins)))
-        (get-buffer-window-list (current-buffer)))
-  (remove-hook 'window-configuration-change-hook 'darkroom--set-margins
-               t))
+        (get-buffer-window-list (current-buffer))))
+
+(defun darkroom--enter-or-leave ()
+  "Enter or leave darkroom according to window configuration."
+  (cond ((= (count-windows) 1)
+         (unless darkroom--saved-state
+           (darkroom--enter)))
+        (darkroom--saved-state
+         (darkroom--leave))
+        (t
+         ;; for clarity, don't do anything
+         )))
 
 (define-minor-mode darkroom-mode
   "Remove visual distractions and focus on writing. When this
@@ -273,40 +294,49 @@ mode is active, everything but the buffer's text is elided from
 view. The buffer margins are set so that text is centered on
 screen. Text size is increased (display engine allowing) by
 `darkroom-text-scale-increase'." nil nil nil
-(when darkroom-tentative-mode
-    (error
-     "Don't mix `darkroom-mode' and `darkroom-tentative-mode'"))
-  ;; FIXME: unfortunately, signalling an error doesn't prevent the
-  ;; mode from turning itself off. How do I do that?
+  (when darkroom-tentative-mode
+    (display-warning
+     'darkroom
+     (concat "Turning off `darkroom-tentative-mode' first. "
+             "It doesn't go with `darkroom-mode'.")
+     (let ((darkroom-mode nil))
+       (darkroom-tentative-mode -1))))
   (cond (darkroom-mode
-         (darkroom--turn-on))
+         (darkroom--enter)
+         (add-hook 'window-configuration-change-hook 'darkroom--set-margins
+                   t t))
         (t
-         (darkroom--turn-off))))
-
-(defun darkroom--maybe-enable ()
-  (let ((darkroom--tentative-mode-driving t))
-    (cond ((and (not darkroom--saved-state) (= (count-windows) 1))
-           (darkroom--turn-on))
-          ((and darkroom--saved-state (> (count-windows) 1))
-           (darkroom--turn-off))
-          (t
-           ;; Some debug code could go here.
-           ))))
+         (darkroom--leave)
+         (remove-hook 'window-configuration-change-hook 'darkroom--set-margins
+                      t))))
 
 (define-minor-mode darkroom-tentative-mode
   "Enters `darkroom-mode' when all other windows are deleted."
-  nil " Room" nil
+  nil " Room" darkroom-mode-map
+  ;; always begin by removing the hook
+  ;; 
+  (remove-hook 'window-configuration-change-hook
+               'darkroom--enter-or-leave 'local)
   (when darkroom-mode
-    (error
-     "Don't mix `darkroom-mode' and `darkroom-tentative-mode'"))
+    (display-warning
+     'darkroom
+     (concat "Turning off `darkroom-mode' first. "
+             "It doesn't go with `darkroom-tentative-mode'.")
+     (let ((darkroom-tentative-mode nil))
+       (darkroom-mode -1))))
+  ;; turn darkroom on or off according to window state
+  ;; 
   (cond (darkroom-tentative-mode
+         ;; re-add the hook when we are turning ourselves on
+         ;;
          (add-hook 'window-configuration-change-hook
-                   'darkroom--maybe-enable nil t)
-         (darkroom--maybe-enable))
+                   'darkroom--enter-or-leave 'append 'local)
+         ;; call this right away if we're supposed to turn darkroom on
+         ;; immediately.
+         ;; 
+         (darkroom--enter-or-leave))
         (t
-         (darkroom--turn-off)
-         (remove-hook 'window-configuration-change-hook
-                      'darkroom--maybe-enable t))))
+         (darkroom--leave))))
 
 
 
