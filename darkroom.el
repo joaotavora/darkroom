@@ -98,31 +98,6 @@ symmetical margins."
   :type 'float
   :group 'darkroom)
 
-(defun darkroom--real-window-width ()
-  "Horrible hack to get the window width in characters.
-`window-width' ignores text scaling."
-  (let ((inhibit-read-only t)
-        (buffer-undo-list t)
-        (truncate-lines nil)
-        (truncate-partial-width-windows nil)
-        (word-wrap t)
-        (line-move-visual t))
-    (save-excursion
-      (with-silent-modifications
-        (let ((begin (point)))
-          (unwind-protect
-              (progn
-                (insert (make-string 10000 ?!))
-                (save-excursion
-                  (goto-char begin)
-                  (next-line)
-                  (backward-char)
-                  (let ((margins (window-margins)))
-                    (+ (or (car margins) 0)
-                       (or (cdr margins) 0)
-                       (current-column)))))
-            (delete-region begin (point))))))))
-
 (defvar darkroom--guess-margins-statistics-cache nil
   "Cache used by `darkroom-guess-margins'.")
 
@@ -138,25 +113,38 @@ which is a width in columns, in which case it will be used
 instead of a window's geometry."
   (if visual-line-mode
       darkroom-margins-if-failed-guess
-    (let* ((window-width (if (integerp window)
+    (let* ((char-width (car (window-text-pixel-size
+                             (selected-window)
+                             (point-min) (1+ (point-min)))))
+           (window-width (if (integerp window)
                              window
                            (with-selected-window window
-                             ;; (let ((edges (window-edges)))
-                             ;;   (- (nth 2 edges) (nth 0 edges)))
-                             (darkroom--real-window-width))))
+                             (let ((saved (window-margins)))
+                               (set-window-margins window 0 0)
+                               (prog1 (truncate
+                                       (window-width window 'pixelwise)
+                                       char-width)
+                                 (set-window-margins window (car saved)
+                                                     (cdr saved)))))))
            (top-quartile-avg
             (or darkroom--guess-margins-statistics-cache
                 (set
                  (make-local-variable 'darkroom--guess-margins-statistics-cache)
-                 (let* ((line-widths (save-excursion
-                                       (goto-char (point-min))
-                                       (cl-loop for start = (point)
-                                                while (search-forward "\n"
-                                                                      20000
-                                                                      'no-error)
-                                                for width = (- (point) start 1)
-                                                unless (zerop width)
-                                                collect width)))
+                 (let* ((line-widths
+                         (save-excursion
+                           (goto-char (point-min))
+                           (cl-loop for start = (point)
+                                    while (search-forward "\n"
+                                                          20000
+                                                          'no-error)
+                                    for width = (truncate
+                                                 (car
+                                                  (window-text-pixel-size
+                                                   window
+                                                   start (1- (point))))
+                                                 char-width)
+                                    unless (zerop width)
+                                    collect width)))
                         (n4 (max 1 (/ (length line-widths) 4))))
                    (/ (apply '+ (cl-subseq (sort line-widths '>) 0 n4)) n4))))))
       (cond
