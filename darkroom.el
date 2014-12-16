@@ -45,6 +45,8 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+
 (defgroup darkroom nil
   "Remove visual distractions and focus on writing"
   :prefix "darkroom-"
