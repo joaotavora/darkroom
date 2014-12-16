@@ -100,34 +100,66 @@ symmetical margins."
   :type 'float
   :group 'darkroom)
 
+(defcustom darkroom-verbose nil
+  "If non-nil, be verbose about darkroom operations."
+  :type 'boolean
+  :group 'darkroom)
+
 (defvar darkroom--guess-margins-statistics-cache nil
   "Cache used by `darkroom-guess-margins'.")
 
+(defun darkroom--window-width (&optional window)
+  "Calculate width of WINDOW in columns, considering text scaling.
+WINDOW defaults to the currently selected window. The function
+assumes the buffer to be filled with at least one character of an
+arbitrary, but fixed width. Narrowing is taken in consideration.
+The return value is a cons (COLS . SCALED-CHAR-WIDTH) where COLS
+is the desired width in columns and SCALED-CHAR-WIDTH is the
+width in pixels of a single character."
+  (when (= (point-min) (point-max))
+    (error "Cannot calculate the width of a single character"))
+  (let* ((window (or window (selected-window)))
+         (scaled-char-width (car (window-text-pixel-size
+                                  window
+                                  (point-min) (1+ (point-min)))))
+         (char-width (frame-char-width))
+         (margins (window-margins window)))
+    (cons (truncate
+           (+ (window-width window 'pixelwise)
+              (* char-width (or (car margins) 0))
+              (* char-width (or (cdr margins) 0)))
+           scaled-char-width)
+          scaled-char-width)))
+
 (defun darkroom-guess-margins (window)
   "Guess suitable margins for `darkroom-margins'.
-Collects some statistics about the buffer's line lengths, and
-apply a heuristic to figure out how wide to set the margins,
-comparing it to WINDOW's width in columns. If the buffer's
-paragraphs are mostly filled to `fill-column', margins should
-center it on the window, otherwise, margins of 0.15 percent are
-used.  For testing purposes, WINDOW can also be an integer number
-which is a width in columns, in which case it will be used
-instead of a window's geometry."
-  (if visual-line-mode
+If in suitable conditions, collect some statistics about the
+buffer's line lengths, and apply a heuristic to figure out how
+wide to set the margins, comparing it to WINDOW's width in
+columns. If the buffer's paragraphs are mostly filled to
+`fill-column', margins should center it on the window, otherwise,
+the margins specified in `darkroom-margins-if-failed-guess'.
+
+In any of these conditions,`darkroom-margins-if-failed-guess' is
+also used:
+
+* if `visual-line-mode' is on;
+* if `variable-pitch-mode' is on;
+* if the buffer is empty.
+
+For testing purposes, WINDOW can also be an integer number which
+is a width in columns, in which case it will be used instead of a
+window's geometry."
+  (if (or visual-line-mode
+          (and buffer-face-mode
+               (eq 'variable-pitch buffer-face-mode-face))
+          (= (point-min) (point-max)))
       darkroom-margins-if-failed-guess
-    (let* ((char-width (car (window-text-pixel-size
-                             (selected-window)
-                             (point-min) (1+ (point-min)))))
-           (window-width (if (integerp window)
-                             window
-                           (with-selected-window window
-                             (let ((saved (window-margins)))
-                               (set-window-margins window 0 0)
-                               (prog1 (truncate
-                                       (window-width window 'pixelwise)
-                                       char-width)
-                                 (set-window-margins window (car saved)
-                                                     (cdr saved)))))))
+    (let* ((window-width-info (if (integerp window)
+                                  window
+                                (darkroom--window-width window)))
+           (window-width (car window-width-info))
+           (scaled-char-width (cdr window-width-info))
            (top-quartile-avg
             (or darkroom--guess-margins-statistics-cache
                 (set
@@ -144,7 +176,7 @@ instead of a window's geometry."
                                                   (window-text-pixel-size
                                                    window
                                                    start (1- (point))))
-                                                 char-width)
+                                                 scaled-char-width)
                                     unless (zerop width)
                                     collect width)))
                         (n4 (max 1 (/ (length line-widths) 4))))
@@ -155,7 +187,16 @@ instead of a window's geometry."
         (message "Long lines detected. Consider turning on `visual-line-mode'")
         darkroom-margins-if-failed-guess)
        ((> top-quartile-avg (* 0.9 fill-column))
-        (let ((margin (truncate (/ (- window-width top-quartile-avg) 2))))
+        ;; calculate margins so that `fill-column' + 1 colums are
+        ;; centered on the window.
+        ;; 
+        (let ((margin (truncate (* (- window-width (1+ fill-column))
+                                   (/ (float scaled-char-width)
+                                      (frame-char-width)))
+                                2)))
+          (if darkroom-verbose
+              (message "Choosing %s-wide margins based on fill-column %s"
+                       margin fill-column))
           (cons margin margin)))
        (t
         darkroom-margins-if-failed-guess)))))
@@ -202,9 +243,7 @@ instead of a window's geometry."
 
 (defun darkroom--reset-margins ()
   "Reset darkroom margins for currently selected window."
-  (let* ((window (selected-window))
-         (margins (window-parameter window 'darkroom--saved-margins)))
-    (set-window-margins window 0 0)))
+  (set-window-margins (selected-window) 0 0))
 
 (defun darkroom-increase-margins (increment)
   "Increase darkroom margins by INCREMENT."
