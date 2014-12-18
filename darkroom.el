@@ -1,8 +1,9 @@
 ;;; darkroom.el --- Remove visual distractions and focus on writing  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2014  João Távora
+;; Copyright (C) 2014  Free Software Foundation, Inc.
 
 ;; Author: João Távora <joaotavora@gmail.com>
+;; Maintainer: João Távora <joaotavora@gmail.com>
 ;; Keywords: convenience, emulations
 ;; Package-Requires: ((cl-lib "0.5"))
 ;; Version: 0.1
