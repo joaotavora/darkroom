@@ -279,16 +279,18 @@ Alist of (VARIABLE . BEFORE-VALUE)")
 ;; (defvar darkroom--saved-text-scale-mode-amount nil
 ;;   "Text scale before `darkroom-mode' is turned on.")
 
-(defun darkroom--enter ()
-  "Save current state and enter darkroom for the current buffer."
-  (setq darkroom--saved-state
-        (mapcar #'(lambda (sym)
-                    (cons sym (buffer-local-value sym (current-buffer))))
-                darkroom--saved-variables))
-  (setq mode-line-format nil
-        header-line-format nil
-        fringes-outside-margins darkroom-fringes-outside-margins)
-  (text-scale-increase darkroom-text-scale-increase)
+(defun darkroom--enter (&optional just-margins)
+  "Save current state and enter darkroom for the current buffer.
+With optional JUST-MARGINS, just set the margins."
+  (unless just-margins
+    (setq darkroom--saved-state
+          (mapcar #'(lambda (sym)
+                      (cons sym (buffer-local-value sym (current-buffer))))
+                  darkroom--saved-variables))
+    (setq mode-line-format nil
+          header-line-format nil
+          fringes-outside-margins darkroom-fringes-outside-margins)
+    (text-scale-increase darkroom-text-scale-increase))
   (mapc #'(lambda (w)
             (with-selected-window w
               (darkroom--set-margins)))
@@ -309,8 +311,7 @@ Alist of (VARIABLE . BEFORE-VALUE)")
 (defun darkroom--enter-or-leave ()
   "Enter or leave darkroom according to window configuration."
   (cond ((= (count-windows) 1)
-         (unless darkroom--saved-state
-           (darkroom--enter)))
+         (darkroom--enter darkroom--saved-state))
         (darkroom--saved-state
          (darkroom--leave))
         (t
