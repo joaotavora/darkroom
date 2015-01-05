@@ -319,6 +319,9 @@ With optional JUST-MARGINS, just set the margins."
          ;; for clarity, don't do anything
          )))
 
+(declare-function darkroom-tentative-mode "darkroom" t)
+
+;;;###autoload
 (define-minor-mode darkroom-mode
   "Remove visual distractions and focus on writing. When this
 mode is active, everything but the buffer's text is elided from
@@ -341,6 +344,7 @@ screen. Text size is increased (display engine allowing) by
          (remove-hook 'window-configuration-change-hook 'darkroom--set-margins
                       t))))
 
+;;;###autoload
 (define-minor-mode darkroom-tentative-mode
   "Enters `darkroom-mode' when all other windows are deleted."
   nil " Room" darkroom-mode-map
@@ -368,7 +372,6 @@ screen. Text size is increased (display engine allowing) by
          (darkroom--enter-or-leave))
         (t
          (darkroom--leave))))
-
 
 
 (provide 'darkroom)
