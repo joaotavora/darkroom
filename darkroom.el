@@ -270,6 +270,7 @@ window's geometry."
 (defconst darkroom--saved-variables
   '(mode-line-format
     header-line-format
+    menu-bar-mode
     fringes-outside-margins)
   "Variables saved in `darkroom--saved-state'")
 
@@ -291,6 +292,8 @@ With optional JUST-MARGINS, just set the margins."
     (setq mode-line-format nil
           header-line-format nil
           fringes-outside-margins darkroom-fringes-outside-margins)
+    (menu-bar-mode -1)
+    (set-frame-parameter nil 'fullscreen 'fullboth)
     (text-scale-increase darkroom-text-scale-increase))
   (mapc #'(lambda (w)
             (with-selected-window w
@@ -302,6 +305,8 @@ With optional JUST-MARGINS, just set the margins."
   (mapc #'(lambda (pair)
             (set (make-local-variable (car pair)) (cdr pair)))
         darkroom--saved-state)
+  (menu-bar-mode menu-bar-mode)
+  (set-frame-parameter nil 'fullscreen nil)
   (setq darkroom--saved-state nil)
   (text-scale-decrease darkroom-text-scale-increase)
   (mapc #'(lambda (w)
