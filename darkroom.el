@@ -47,6 +47,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'face-remap)
 
 (defgroup darkroom nil
   "Remove visual distractions and focus on writing"
