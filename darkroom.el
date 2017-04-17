@@ -296,7 +296,8 @@ With optional JUST-MARGINS, just set the margins."
   (mapc #'(lambda (w)
             (with-selected-window w
               (darkroom--set-margins)))
-        (get-buffer-window-list (current-buffer))))
+        (get-buffer-window-list (current-buffer)))
+  (modify-frame-parameters nil '((fullscreen . fullscreen))))
 
 (defun darkroom--leave ()
   "Undo the effects of `darkroom--enter'."
@@ -308,7 +309,8 @@ With optional JUST-MARGINS, just set the margins."
   (mapc #'(lambda (w)
             (with-selected-window w
               (darkroom--reset-margins)))
-        (get-buffer-window-list (current-buffer))))
+        (get-buffer-window-list (current-buffer)))
+  (modify-frame-parameters nil '((fullscreen . nil))))
 
 (defun darkroom--enter-or-leave ()
   "Enter or leave darkroom according to window configuration."
