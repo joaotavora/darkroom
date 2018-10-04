@@ -304,7 +304,7 @@ With optional JUST-MARGINS, just set the margins."
             (set (make-local-variable (car pair)) (cdr pair)))
         darkroom--saved-state)
   (setq darkroom--saved-state nil)
-  (text-scale-decrease darkroom-text-scale-increase)
+  (text-scale-mode -1)
   (mapc #'(lambda (w)
             (with-selected-window w
               (darkroom--reset-margins)))
