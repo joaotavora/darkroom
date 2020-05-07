@@ -6,7 +6,7 @@
 ;; Maintainer: João Távora <joaotavora@gmail.com>
 ;; Keywords: convenience, emulations
 ;; Package-Requires: ((cl-lib "0.5"))
-;; Version: 0.2
+;; Version: 0.3
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
