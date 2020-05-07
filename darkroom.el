@@ -171,7 +171,7 @@ window's geometry."
                            (goto-char (point-min))
                            (cl-loop for start = (point)
                                     while (search-forward "\n"
-                                                          20000
+                                                          (+ 20000 (point-min))
                                                           'no-error)
                                     for width = (truncate
                                                  (car
