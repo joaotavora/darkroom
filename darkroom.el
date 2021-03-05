@@ -166,13 +166,17 @@ window's geometry."
             (or darkroom--guess-margins-statistics-cache
                 (set
                  (make-local-variable 'darkroom--guess-margins-statistics-cache)
-                 (let* ((line-widths
+		 (let* ((probe-max (+ 20000 (point-min)))
+			(probe-end (min probe-max (point-max)))
+			(line-widths
                          (save-excursion
                            (goto-char (point-min))
                            (cl-loop for start = (point)
-                                    while (search-forward "\n"
-                                                          (+ 20000 (point-min))
-                                                          'no-error)
+                                    while (or (search-forward "\n"
+                                                              probe-max
+                                                              'no-error)
+					      (and (< start probe-end)
+						   (goto-char probe-end)))
                                     for width = (truncate
                                                  (car
                                                   (window-text-pixel-size
